@@ -40,7 +40,7 @@ class kafka(ComponentBase):
         critLoad = self.metadata.get("critLoad", "").lower()
         mode = self.metadata.get("mode", "all data")
         substation =  self.metadata.get("substation", "")
-        csvOut = metadata.get("csv", True)
+        csvOut = self.metadata.get("csv", True)
 
         #kafka consumer
         consumer = KafkaConsumer(
