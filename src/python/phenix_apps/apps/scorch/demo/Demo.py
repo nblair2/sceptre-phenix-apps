@@ -17,7 +17,7 @@ class Demo(ComponentBase):
 
         #check yaml to see if we want to include the year or not
         include_year = self.metadata.get('include_year', None)
-        with open(os.path.join(self.base_dir, f'demo.txt')) as f:
+        with open(os.path.join(self.base_dir, f'demo.txt'), 'w+') as f:
             #if include_year, write current time with year. if not include_year, write current time without year
             if include_year:
                 f.write(f'Current time: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}\n')
