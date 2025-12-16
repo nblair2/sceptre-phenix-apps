@@ -5,6 +5,9 @@ import sys
 import time
 from typing import List, Optional, Tuple, Union
 from pathlib import Path
+import io
+from contextlib import redirect_stdout, redirect_stderr
+import json
 
 from phenix_apps.common.settings import PHENIX_DIR
 from phenix_apps.common import logger, utils
@@ -108,7 +111,7 @@ class ComponentBase(object):
 
     def execute_stage(self):
         """
-        Executes the stage passed in from the json blob
+        Executes the stage passed in from the json blob and captures stdout and stderr to info file
         """
 
         stages_dict = {
@@ -118,7 +121,36 @@ class ComponentBase(object):
             'cleanup'   : self.cleanup
         }
 
-        stages_dict[self.stage]()
+        start = time.time()
+        stdout_buffer = io.StringIO()
+        stderr_buffer = io.StringIO()
+        try:
+            with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
+                out = stages_dict[self.stage]() or ""
+        except Exception as ex:
+            out = f"Error occurred: {ex}"
+        finally:
+            stdout_buffer.flush()
+            stderr_buffer.flush()
+
+        end = time.time()
+
+        info_file = os.path.join(self.base_dir, f'{self.exp_name}-run-{self.run}-{self.name}-loop-{self.loop}-count-{self.count}-{self.stage}-info.json')
+        content = {
+            "experiment": self.exp_name,
+            "run": self.run,
+            "component": self.name,
+            "loop": self.loop,
+            "count": self.count,
+            "stage": self.stage,
+            "start_time": time.strftime("%Y-%m-%dT%H-%M-%SZ", time.gmtime(start)),
+            "end_time": time.strftime("%Y-%m-%dT%H-%M-%SZ", time.gmtime(end)),
+            "return": out,
+            "stdout": stdout_buffer.getvalue(),
+            "stderr": stderr_buffer.getvalue()
+        }
+        with open(info_file, 'w') as f:
+            json.dump(content, f, indent=4)
 
     @property
     def mm(self) -> minimega.minimega:
