@@ -136,11 +136,11 @@ class ComponentBase:
 
         log_format = "[{time:YYYY-MM-DD HH:mm:ss.SSS}] {level} : {message}"
 
-        # Configure logger to output JSON to stderr while also mirroring log lines
-        # to stdout so the scorch modal continues to receive component progress.
+        # Configure logger to output JSON to stderr. The phenix core parses
+        # these frames and forwards them to both its log and the scorch modal,
+        # so they must not also be mirrored to stdout.
         logger.remove()
         logger.add(phenix_stderr_sink)
-        ui_sink_id = logger.add(stdout_mirror, format=log_format)
 
         # Add a sink to capture logs to the buffer for the status file
         sink_id = logger.add(lambda msg: log_buffer.write(msg), format=log_format)
@@ -161,7 +161,6 @@ class ComponentBase:
         finally:
             sys.stdout = orig_stdout_stream
             sys.stderr = orig_stderr_stream
-            logger.remove(ui_sink_id)
             logger.remove(sink_id)
 
         end = time.time()
