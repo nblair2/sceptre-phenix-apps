@@ -52,15 +52,18 @@ def test_format_phenix_json_log_keeps_small_messages_single_line():
     assert "part" not in entry
 
 
-def test_format_phenix_json_log_splits_multiline_messages():
+def test_format_phenix_json_log_keeps_multiline_messages_in_one_frame():
     formatted = logger_module._format_phenix_json_log(
         _DummyMessage("line one\nline two")
     )
 
-    entries = [json.loads(line) for line in formatted.splitlines()]
+    lines = formatted.splitlines()
 
-    assert [entry["msg"] for entry in entries] == ["line one", "line two"]
-    assert all(entry["parts"] == 2 for entry in entries)
+    assert len(lines) == 1
+
+    entry = json.loads(lines[0])
+    assert entry["msg"] == "line one\nline two"
+    assert "part" not in entry
 
 
 def test_format_phenix_json_log_splits_long_lines_into_chunks():
@@ -79,18 +82,17 @@ def test_format_phenix_json_log_splits_long_lines_into_chunks():
 
 def test_phenix_stderr_sink_writes_chunked_frames_individually(monkeypatch):
     capture = _CaptureStream()
-    long_line = "x" * (logger_module.PHENIX_JSON_LOG_CHUNK_SIZE + 25)
+    text = "line one\n" + "x" * (logger_module.PHENIX_JSON_LOG_CHUNK_SIZE + 25)
 
     monkeypatch.setattr(logger_module.sys, "stderr", capture)
 
-    logger_module.phenix_stderr_sink(_DummyMessage(f"line one\n{long_line}"))
+    logger_module.phenix_stderr_sink(_DummyMessage(text))
 
-    assert len(capture.writes) == 3
-    assert capture.flush_count == 3
+    assert len(capture.writes) == 2
+    assert capture.flush_count == 2
 
     entries = [json.loads(line) for line in capture.writes]
 
-    assert entries[0]["msg"] == "line one"
-    assert "".join(entry["msg"] for entry in entries[1:]) == long_line
-    assert [entry["part"] for entry in entries] == [1, 2, 3]
-    assert all(entry["parts"] == 3 for entry in entries)
+    assert "".join(entry["msg"] for entry in entries) == text
+    assert [entry["part"] for entry in entries] == [1, 2]
+    assert all(entry["parts"] == 2 for entry in entries)

@@ -10,19 +10,19 @@ PHENIX_JSON_LOG_CHUNK_SIZE = 16 * 1024
 
 
 def _iter_log_chunks(text: str):
-    """Yield line- and size-bounded chunks for transport-safe logging."""
+    """Yield size-bounded chunks for transport-safe logging.
+
+    Newlines are NOT chunk boundaries: JSON encoding escapes them, so a
+    multi-line message still travels as a single one-line JSON frame and the
+    core logs it as one entry instead of one entry per line.
+    """
 
     if text == "":
         yield ""
         return
 
-    for line in text.splitlines():
-        if line == "":
-            yield ""
-            continue
-
-        for start in range(0, len(line), PHENIX_JSON_LOG_CHUNK_SIZE):
-            yield line[start : start + PHENIX_JSON_LOG_CHUNK_SIZE]
+    for start in range(0, len(text), PHENIX_JSON_LOG_CHUNK_SIZE):
+        yield text[start : start + PHENIX_JSON_LOG_CHUNK_SIZE]
 
 
 def _iter_phenix_json_log_lines(message):
