@@ -16,6 +16,7 @@ or `-p` flag is needed.
 import pytest
 from phenix_apps.apps.myapp.app import MyApp
 
+
 @pytest.mark.app_class(cls=MyApp)
 def test_does_thing(mock_app):
     mock_app.do_thing("host1")
@@ -34,7 +35,9 @@ from phenix_apps.apps.myapp.app import MyApp
 
 pytestmark = pytest.mark.app_class(cls=MyApp, name="myapp")
 
+
 def test_one(mock_app): ...
+
 
 def test_two(mock_app): ...
 ```

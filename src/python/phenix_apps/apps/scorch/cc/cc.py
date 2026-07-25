@@ -138,7 +138,7 @@ class CC(ComponentBase):
                                 raise RuntimeError("results validation failed")
                             logger.info("results are valid")
                     else:
-                        self.mm.cc_filter(f"name={vm.hostname}")
+                        utils.mm_cc_filter_vm(self.mm, vm.hostname)
 
                         if once:
                             self.mm.cc_exec_once(script)
@@ -157,7 +157,7 @@ class CC(ComponentBase):
 
                     script = self.__send_cmd_as_file(vm.hostname, cmd.args)
 
-                    self.mm.cc_filter(f"name={vm.hostname}")
+                    utils.mm_cc_filter_vm(self.mm, vm.hostname)
 
                     if once:
                         self.mm.cc_background_once(script)
@@ -251,9 +251,7 @@ class CC(ComponentBase):
         with open(cmd_src, "w") as f:
             f.write(cmd)
 
-        self.mm.cc_filter(f"name={hostname}")
-        cmd_id = utils.mm_command_id(self.mm.cc_send(cmd_src))
-        utils.mm_wait_for_cmd(self.mm, cmd_id)
+        utils.mm_cc_send_wait(self.mm, hostname, cmd_src, self.exp_name)
         self.mm.clear_cc_filter()
 
         os.remove(cmd_src)
