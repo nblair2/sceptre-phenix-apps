@@ -241,6 +241,7 @@ External plugins allow you to extend the Scale app without modifying the core co
 from phenix_apps.apps.scale.interface import ScalePlugin
 from phenix_apps.apps.scale.registry import register_plugin
 
+
 @register_plugin("my-external-plugin")
 class MyExternalPlugin(ScalePlugin):
     # ... implement abstract methods ...

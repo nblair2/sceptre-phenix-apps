@@ -139,6 +139,7 @@ class AppBase:
 
         if wildcard:
             return extracted
+
         return None
 
     def extract_topology_nodes_by_attribute(

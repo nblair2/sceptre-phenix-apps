@@ -72,9 +72,7 @@ class Caldera(ComponentBase):
                     "api_call.mako", templates, f, model="adversaries"
                 )
 
-            mm.cc_filter(f"name={server}")
-            cmd_id = utils.mm_command_id(mm.cc_send(cmd_src))
-            utils.mm_wait_for_cmd(mm, cmd_id)
+            utils.mm_cc_send_wait(mm, server, cmd_src, self.exp_name)
 
             os.remove(cmd_src)
 
@@ -111,9 +109,7 @@ class Caldera(ComponentBase):
                     "api_call.mako", templates, f, model="sources"
                 )
 
-            mm.cc_filter(f"name={server}")
-            cmd_id = utils.mm_command_id(mm.cc_send(cmd_src))
-            utils.mm_wait_for_cmd(mm, cmd_id)
+            utils.mm_cc_send_wait(mm, server, cmd_src, self.exp_name)
 
             os.remove(cmd_src)
 
@@ -150,9 +146,7 @@ class Caldera(ComponentBase):
                     "api_call.mako", templates, f, model="planners"
                 )
 
-            mm.cc_filter(f"name={server}")
-            cmd_id = utils.mm_command_id(mm.cc_send(cmd_src))
-            utils.mm_wait_for_cmd(mm, cmd_id)
+            utils.mm_cc_send_wait(mm, server, cmd_src, self.exp_name)
 
             os.remove(cmd_src)
 
@@ -183,9 +177,7 @@ class Caldera(ComponentBase):
         with open(cmd_src, "w") as f:
             utils.mako_serve_template("new_operation.mako", templates, f, op=op)
 
-        mm.cc_filter(f"name={server}")
-        cmd_id = utils.mm_command_id(mm.cc_send(cmd_src))
-        utils.mm_wait_for_cmd(mm, cmd_id)
+        utils.mm_cc_send_wait(mm, server, cmd_src, self.exp_name)
 
         os.remove(cmd_src)
 
@@ -208,9 +200,7 @@ class Caldera(ComponentBase):
                     "get_operation.mako", templates, f, op=op["id"]
                 )
 
-            mm.cc_filter(f"name={server}")
-            cmd_id = utils.mm_command_id(mm.cc_send(cmd_src))
-            utils.mm_wait_for_cmd(mm, cmd_id)
+            utils.mm_cc_send_wait(mm, server, cmd_src, self.exp_name)
 
             os.remove(cmd_src)
 
@@ -236,9 +226,7 @@ class Caldera(ComponentBase):
                 "get_operation_report.mako", templates, f, op=op["id"]
             )
 
-        mm.cc_filter(f"name={server}")
-        cmd_id = utils.mm_command_id(mm.cc_send(cmd_src))
-        utils.mm_wait_for_cmd(mm, cmd_id)
+        utils.mm_cc_send_wait(mm, server, cmd_src, self.exp_name)
 
         os.remove(cmd_src)
 

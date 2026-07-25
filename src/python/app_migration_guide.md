@@ -21,15 +21,19 @@ import argparse
 import sys
 from .app import MyApp
 
+
 def main():
     parser = argparse.ArgumentParser(description="phenix user app: my-app")
-    parser.add_argument("stage", choices=["configure", "pre-start", ...], help="Lifecycle stage")
+    parser.add_argument(
+        "stage", choices=["configure", "pre-start", ...], help="Lifecycle stage"
+    )
     parser.add_argument("--dry-run", action="store_true", help="Perform a dry run")
     args = parser.parse_args()
 
     app = MyApp(args.stage, args.dry_run)
     app.execute_stage()
     print(app.experiment.to_json())
+
 
 if __name__ == "__main__":
     main()
@@ -43,8 +47,10 @@ Update the file to call the new `AppBase.main()` class method, passing the app's
 # new __main__.py
 from .app import MyApp
 
+
 def main():
     MyApp.main("my-app-name")
+
 
 if __name__ == "__main__":
     main()
@@ -64,6 +70,7 @@ import sys
 from box import Box
 from phenix_apps.apps import AppBase
 
+
 class MyApp(AppBase):
     def __init__(self, stage, dryrun=False):
         self.raw_input = sys.stdin.read()
@@ -80,6 +87,7 @@ The new constructor is much cleaner. It accepts `name`, `stage`, and `dryrun` an
 ```python
 # new app.py
 from phenix_apps.apps import AppBase
+
 
 class MyApp(AppBase):
     def __init__(self, name, stage, dryrun=False):
