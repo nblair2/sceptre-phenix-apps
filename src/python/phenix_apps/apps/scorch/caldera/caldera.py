@@ -72,6 +72,7 @@ class Caldera(ComponentBase):
                     "api_call.mako", templates, f, model="adversaries"
                 )
 
+            utils.mm_cc_client_active(mm, server)
             mm.cc_filter(f"name={server}")
             cmd_id = utils.mm_command_id(mm.cc_send(cmd_src))
             utils.mm_wait_for_cmd(mm, cmd_id)
@@ -111,6 +112,7 @@ class Caldera(ComponentBase):
                     "api_call.mako", templates, f, model="sources"
                 )
 
+            utils.mm_cc_client_active(mm, server)
             mm.cc_filter(f"name={server}")
             cmd_id = utils.mm_command_id(mm.cc_send(cmd_src))
             utils.mm_wait_for_cmd(mm, cmd_id)
@@ -150,6 +152,7 @@ class Caldera(ComponentBase):
                     "api_call.mako", templates, f, model="planners"
                 )
 
+            utils.mm_cc_client_active(mm, server)
             mm.cc_filter(f"name={server}")
             cmd_id = utils.mm_command_id(mm.cc_send(cmd_src))
             utils.mm_wait_for_cmd(mm, cmd_id)
@@ -183,6 +186,7 @@ class Caldera(ComponentBase):
         with open(cmd_src, "w") as f:
             utils.mako_serve_template("new_operation.mako", templates, f, op=op)
 
+        utils.mm_cc_client_active(mm, server)
         mm.cc_filter(f"name={server}")
         cmd_id = utils.mm_command_id(mm.cc_send(cmd_src))
         utils.mm_wait_for_cmd(mm, cmd_id)
@@ -208,6 +212,7 @@ class Caldera(ComponentBase):
                     "get_operation.mako", templates, f, op=op["id"]
                 )
 
+            utils.mm_cc_client_active(mm, server)
             mm.cc_filter(f"name={server}")
             cmd_id = utils.mm_command_id(mm.cc_send(cmd_src))
             utils.mm_wait_for_cmd(mm, cmd_id)
@@ -236,6 +241,7 @@ class Caldera(ComponentBase):
                 "get_operation_report.mako", templates, f, op=op["id"]
             )
 
+        utils.mm_cc_client_active(mm, server)
         mm.cc_filter(f"name={server}")
         cmd_id = utils.mm_command_id(mm.cc_send(cmd_src))
         utils.mm_wait_for_cmd(mm, cmd_id)

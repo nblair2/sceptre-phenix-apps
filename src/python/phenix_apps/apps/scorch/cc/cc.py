@@ -251,6 +251,7 @@ class CC(ComponentBase):
         with open(cmd_src, "w") as f:
             f.write(cmd)
 
+        utils.mm_cc_client_active(self.mm, hostname)
         self.mm.cc_filter(f"name={hostname}")
         cmd_id = utils.mm_command_id(self.mm.cc_send(cmd_src))
         utils.mm_wait_for_cmd(self.mm, cmd_id)

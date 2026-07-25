@@ -235,7 +235,22 @@ def expand_shorthand(short: str) -> list:
     return [short]
 
 
-def mm_send(mm: minimega.minimega, vm: str, src: str, dst: str) -> None:
+# seconds between cc client checks; matches Go util/mm c2ActiveCheckInterval
+CC_POLL_RATE = float(os.environ.get("PHENIX_CC_POLL_RATE", 2.0))
+# bounded window to ride out the gap between a response being counted and the
+# exit code being recorded
+CC_EXITCODE_GRACE = float(os.environ.get("PHENIX_CC_EXITCODE_GRACE", 10.0))
+# bounded window for the miniccc client to register on a minimega host;
+# matches Go util/mm DefaultC2Timeout
+CC_CLIENT_GRACE = float(os.environ.get("PHENIX_CC_CLIENT_GRACE", 300.0))
+# bounded window for a cc command (mm_wait_for_cmd / mm_wait_for_prefix /
+# mm_exec_wait) to be answered
+CC_CMD_GRACE = float(os.environ.get("PHENIX_CC_CMD_GRACE", 300.0))
+
+
+def mm_send(
+    mm: minimega.minimega, vm: str, src: str, dst: str, grace: float = CC_CLIENT_GRACE
+) -> None:
     if not os.path.exists(src):
         raise ValueError(f"{src} not found locally")
 
@@ -251,7 +266,7 @@ def mm_send(mm: minimega.minimega, vm: str, src: str, dst: str) -> None:
     if Path("/tmp/miniccc-mounts").is_dir():
         base = "/tmp/miniccc-mounts"
 
-    mm_cc_client_active(mm, vm)
+    mm_cc_client_active(mm, vm, grace=grace)
 
     with tempfile.TemporaryDirectory(dir=base) as tmp:
         vm_dst = os.path.join(tmp, dst.strip("/"))
@@ -275,7 +290,13 @@ def mm_send(mm: minimega.minimega, vm: str, src: str, dst: str) -> None:
             time.sleep(1.0)
 
 
-def mm_recv(mm: minimega.minimega, vm: str, src: list[str] | str, dst: str) -> None:
+def mm_recv(
+    mm: minimega.minimega,
+    vm: str,
+    src: list[str] | str,
+    dst: str,
+    grace: float = CC_CLIENT_GRACE,
+) -> None:
     """
     Transfer one or more files from a VM to a destination on the host using miniccc mounts.
     """
@@ -292,7 +313,7 @@ def mm_recv(mm: minimega.minimega, vm: str, src: list[str] | str, dst: str) -> N
     if Path("/tmp/miniccc-mounts").is_dir():
         base = "/tmp/miniccc-mounts"
 
-    mm_cc_client_active(mm, vm)
+    mm_cc_client_active(mm, vm, grace=grace)
 
     with tempfile.TemporaryDirectory(dir=base) as tmp:
         if isinstance(src, str):
@@ -346,19 +367,9 @@ def mm_get_cc_path(mm: minimega.minimega) -> Path | None:
     return cc_path
 
 
-# seconds between cc client checks; matches Go util/mm c2ActiveCheckInterval
-CC_POLL_RATE = float(os.environ.get("PHENIX_CC_POLL_RATE", 2.0))
-# bounded window to ride out the gap between a response being counted and the
-# exit code being recorded
-CC_EXITCODE_GRACE = float(os.environ.get("PHENIX_CC_EXITCODE_GRACE", 10.0))
-# bounded window for the miniccc client to register on a minimega host;
-# matches Go util/mm DefaultC2Timeout
-CC_CLIENT_GRACE = float(os.environ.get("PHENIX_CC_CLIENT_GRACE", 300.0))
-
-
-def mm_cc_all_hosts(mm: minimega.minimega, method, *args) -> list:
-    """Call an mm cc_* method and return ALL per-host response rows, without
-    raising on an individual host's error.
+def mm_cc_all_hosts(mm: minimega.minimega, method, *args, **kwargs) -> list:
+    """Call an mm method (any method, not only cc_*) and return ALL per-host
+    response rows, without raising on an individual host's error.
 
     On a multi-host deployments, cc_exitcode / cc_responses fan out across the
     namespace: the host running the VM returns the data while sibling hosts
@@ -371,7 +382,7 @@ def mm_cc_all_hosts(mm: minimega.minimega, method, *args) -> list:
     mm._raise_errors = False
 
     try:
-        return method(*args)
+        return method(*args, **kwargs)
     finally:
         mm._raise_errors = saved
 
@@ -382,22 +393,46 @@ def mm_cc_client_active(
     grace: float = CC_CLIENT_GRACE,
     poll_rate: float = CC_POLL_RATE,
     by_uuid: bool = False,
-) -> None:
+) -> str:
     """Block until the miniccc client for ``vm`` is registered with minimega.
 
-    Mirrors the Go util/mm IsC2ClientActive pre-flight. The miniccc agent
-    can be transiently unresolvable which causes downstream cc_mount /
-    cc_exec / cc_send calls to fail with "no such client: <uuid>". Polls
-    ``cc client`` until a row matching ``vm`` appears on any host, or raises
-    RuntimeError once ``grace`` is exceeded.
+    Returns the client's UUID, so callers that need it (e.g. ``mm_exec_wait``)
+    don't have to resolve it a second time.
 
-    By default ``vm`` is matched against the agent's self-reported hostname --
-    this is intentionally strict so a VM that hasn't yet booted to the
-    expected hostname (e.g. a Windows VM mid-rename) is not considered ready.
-    Pass ``by_uuid=True`` to match by VM UUID instead.
+    The miniccc agent can be transiently unresolvable which causes downstream
+    cc_mount / cc_exec / cc_send calls to fail with "no such client: <uuid>".
+    Polls ``cc client`` until a row matching ``vm`` appears on any host, or
+    raises RuntimeError once ``grace`` is exceeded.
+
+    Matches primarily on the client's UUID (resolved from the minimega VM
+    name via ``mm_vm_uuid``), falling back to a case-insensitive match on the
+    client's self-reported hostname column. This no longer mirrors the Go
+    util/mm IsC2ClientActive pre-flight verbatim: routers and baked images
+    frequently report a guest hostname that differs from the minimega VM
+    name, so matching on hostname alone left such VMs stalling for the full
+    ``grace`` window. Comparisons are case-insensitive because the Go
+    original filters via minicli's ``.filter``, which itself lowercases both
+    sides -- a strict ``==`` here was actually stricter than the check it
+    claimed to mirror.
+
+    ``vm`` is normally a minimega VM name, and a name that does not resolve is
+    an error rather than something to wait out. Pass ``by_uuid=True`` when
+    ``vm`` may instead already be a UUID: the name lookup is still attempted
+    first, and only its failure is treated as "this was a UUID all along". That
+    ordering matters -- an earlier version took ``by_uuid`` to mean "skip the
+    lookup", so passing a name with it set could never match anything and was
+    guaranteed to burn the full grace window.
     """
-    column = "uuid" if by_uuid else "hostname"
-    deadline = time.monotonic() + grace
+    uuid = mm_vm_uuid(mm, vm)
+
+    if uuid is None:
+        if not by_uuid:
+            raise RuntimeError(f"vm {vm} does not exist in the namespace")
+
+        uuid = vm
+
+    start = time.monotonic()
+    deadline = start + grace
 
     while True:
         responses = mm_cc_all_hosts(mm, mm.cc_clients)
@@ -406,18 +441,33 @@ def mm_cc_client_active(
             header = resp.get("Header") or []
             tabular = resp.get("Tabular") or []
 
-            if column not in header:
-                continue
+            uuid_idx = header.index("uuid") if "uuid" in header else None
+            hostname_idx = header.index("hostname") if "hostname" in header else None
 
-            col_idx = header.index(column)
             for row in tabular:
-                if col_idx < len(row) and row[col_idx] == vm:
-                    return
+                if (
+                    uuid_idx is not None
+                    and uuid_idx < len(row)
+                    and row[uuid_idx].lower() == uuid.lower()
+                ):
+                    return uuid
+                if (
+                    hostname_idx is not None
+                    and hostname_idx < len(row)
+                    and row[hostname_idx].lower() == vm.lower()
+                ):
+                    return uuid
 
         if time.monotonic() >= deadline:
             raise RuntimeError(
-                f"timed out after {grace}s waiting for miniccc client on VM {vm}"
+                f"timed out after {grace}s waiting for miniccc client on VM "
+                f"{vm} (uuid {uuid})"
             )
+
+        logger.warning(
+            f"miniccc client for VM {vm} (uuid {uuid}) not yet registered "
+            f"after {time.monotonic() - start:.1f}s (grace {grace}s); retrying"
+        )
 
         time.sleep(poll_rate)
 
@@ -436,25 +486,36 @@ def mm_cc_exitcode_wait(
     "no client <vm>". Scan every host row and return the one carrying the code.
     ``grace`` bounds the wait for the gap between a response being counted and
     the exit code being recorded, raising RuntimeError if exceeded.
+
+    The per-host errors seen on the last poll are carried into that RuntimeError.
+    Without them a permanent failure -- a command id that does not exist, or a
+    minimega too old to have ``cc exitcode`` -- is indistinguishable from a
+    client that simply never answered, because mm_cc_all_hosts suppresses the
+    raise and the scan below skips every row carrying an Error.
     """
     deadline = time.monotonic() + grace
+    errors = []
 
     while True:
         rows = mm_cc_all_hosts(mm, mm.cc_exitcode, cmd_id, client)
+
+        errors = [row["Error"] for row in rows if row.get("Error")]
 
         for row in rows:
             if not row.get("Error") and row.get("Response") not in (None, ""):
                 return row
 
+        detail = f"; last errors from minimega: {'; '.join(errors)}" if errors else ""
+
         if time.monotonic() >= deadline:
             raise RuntimeError(
                 f"timed out after {grace}s waiting for exit code of command "
-                f"{cmd_id} on {client}"
+                f"{cmd_id} on {client}{detail}"
             )
 
         logger.warning(
             f"exit code for {client} (cmd {cmd_id}) not yet reported by any host; "
-            f"retrying"
+            f"retrying{detail}"
         )
         time.sleep(poll_rate)
 
@@ -480,11 +541,21 @@ def mm_exec_wait(
     vm: str,
     cmd: str,
     once: bool = True,
-    timeout: float = 0.0,
+    timeout: float = CC_CMD_GRACE,
     poll_rate: float = 1.0,
     debug: bool = False,
+    client_grace: float = CC_CLIENT_GRACE,
 ) -> dict:
-    mm_cc_client_active(mm, vm)
+    """Execute ``cmd`` on ``vm`` via cc and wait for it to complete.
+
+    ``timeout`` bounds how long to wait for the command response; pass
+    ``timeout=0.0`` to wait forever instead of the default ``CC_CMD_GRACE``
+    bound. ``client_grace`` separately bounds the pre-flight wait for the
+    miniccc client to register.
+    """
+    # The pre-flight already resolved the VM's UUID, so reuse it below rather
+    # than paying for a second `vm info` round-trip.
+    uuid = mm_cc_client_active(mm, vm, grace=client_grace)
     mm.cc_filter(f"name={vm}")
 
     # Capture the new command's id directly from the cc_exec response rather than
@@ -499,11 +570,13 @@ def mm_exec_wait(
     # The command has completed (mm_wait_for_cmd saw a response). Fetch the exit
     # code by UUID; mm_cc_exitcode_wait scans all hosts and ignores the sibling
     # "no client" rows that the multi-host fan-out returns. Fall back to the VM
-    # name if the UUID lookup comes back empty.
-    uuid = mm_vm_uuid(mm, vm)
-    grace = timeout if timeout else CC_EXITCODE_GRACE
+    # name if the UUID lookup came back empty.
+    # The exit-code grace only needs to ride out the gap between a response
+    # being counted and the exit code being written, which is inherently
+    # short -- it must not inherit the caller's (possibly much larger)
+    # command timeout.
     exit_resp = mm_cc_exitcode_wait(
-        mm, cmd_id, uuid or vm, grace=grace, poll_rate=poll_rate
+        mm, cmd_id, uuid or vm, grace=CC_EXITCODE_GRACE, poll_rate=poll_rate
     )
 
     result = {
@@ -552,10 +625,16 @@ def mm_exec_wait(
 def mm_wait_for_cmd(
     mm: minimega.minimega,
     cmd_id: str,
-    timeout: float = 0.0,
+    timeout: float = CC_CMD_GRACE,
     poll_rate: float = 1.0,
     debug: bool = False,
 ) -> None:
+    """Block until cc command ``cmd_id`` has at least one response.
+
+    ``timeout`` bounds the wait; pass ``timeout=0.0`` to wait forever instead
+    of the default ``CC_CMD_GRACE`` bound.
+    """
+
     def last_test(c):
         return c[0] == cmd_id
 
@@ -563,43 +642,62 @@ def mm_wait_for_cmd(
         return int(c[3]) > 0
 
     waiting = True
-    counter = 0
+    start = time.monotonic()
+    deadline = start + timeout
 
     while waiting:
         # >>> mm.cc_commands()
         # [{'Host': 'harmonie', 'Response': '', 'Header': ['id', 'prefix', 'command', 'responses', 'background', 'once', 'sent', 'received', 'connectivity', 'level', 'filter'], 'Tabular': [['1', 'testing', '[/usr/bin/iperf3 --version]', '15', 'false', 'true', '[]', '[]', '', '', 'os=linux && iperf=1']], 'Error': '', 'Data': None}]
-        commands = mm.cc_commands()
+        commands = mm_cc_all_hosts(mm, mm.cc_commands)
 
         for host in commands:
-            last = list(filter(last_test, host["Tabular"]))
+            last = list(filter(last_test, host.get("Tabular") or []))
             done = list(filter(done_test, last))
 
             if len(done) > 0:
                 waiting = False
                 break
 
-        if timeout and counter > int(timeout / poll_rate):
+        # The command was answered -- don't fall through to the deadline check,
+        # which would otherwise fail a command that completed on the last poll.
+        if not waiting:
+            break
+
+        elapsed = time.monotonic() - start
+
+        if timeout and time.monotonic() >= deadline:
             raise RuntimeError(
-                f"Timeout exceeded in mm_wait_for_command (timeout={timeout}, counter={counter}, poll_rate={poll_rate})"
+                f"Timeout exceeded in mm_wait_for_cmd (timeout={timeout}, elapsed={elapsed:.1f}, poll_rate={poll_rate})"
             ) from None
+
+        logger.warning(
+            f"waiting for cc command '{cmd_id}' (elapsed={elapsed:.1f}s, "
+            f"timeout={timeout}) in mm_wait_for_cmd"
+        )
 
         if debug:
             print_msg(
-                f"Waiting {poll_rate} seconds before checking command for ID '{cmd_id}' in mm_wait_for_cmd (timeout={timeout}, counter={counter})"
+                f"Waiting {poll_rate} seconds before checking command for ID '{cmd_id}' in mm_wait_for_cmd (timeout={timeout}, elapsed={elapsed:.1f})"
             )
 
         time.sleep(poll_rate)
-        counter += 1
 
 
 def mm_wait_for_prefix(
     mm: minimega.minimega,
     prefix: str,
     num_responses: int,
-    timeout: float = 0.0,
+    timeout: float = CC_CMD_GRACE,
     poll_rate: float = 1.0,
     debug: bool = False,
 ) -> None:
+    """Block until ``num_responses`` cc commands with prefix ``prefix`` have
+    completed.
+
+    ``timeout`` bounds the wait; pass ``timeout=0.0`` to wait forever instead
+    of the default ``CC_CMD_GRACE`` bound.
+    """
+
     # 'Header': ['id', 'prefix', 'command', 'responses', 'background', 'once', 'sent', 'received', 'connectivity', 'level', 'filter']
     # 'Tabular': [['1', 'testing', '[/usr/bin/iperf3 --version]', '15', 'false', 'true', '[]', '[]', '', '', 'os=linux && iperf=1']]
     def last_test(c):
@@ -609,31 +707,43 @@ def mm_wait_for_prefix(
         return int(c[3]) == num_responses
 
     waiting = True
-    counter = 0
+    start = time.monotonic()
+    deadline = start + timeout
 
     while waiting:
-        commands = mm.cc_commands()
+        commands = mm_cc_all_hosts(mm, mm.cc_commands)
 
         for host in commands:
-            last = list(filter(last_test, host["Tabular"]))
+            last = list(filter(last_test, host.get("Tabular") or []))
             done = list(filter(done_test, last))
 
             if len(done) > 0:
                 waiting = False
                 break
 
-        if timeout and counter > int(timeout / poll_rate):
+        # The commands were answered -- don't fall through to the deadline check,
+        # which would otherwise fail a batch that completed on the last poll.
+        if not waiting:
+            break
+
+        elapsed = time.monotonic() - start
+
+        if timeout and time.monotonic() >= deadline:
             raise RuntimeError(
-                f"Timeout exceeded in mm_wait_for_prefix (timeout={timeout}, counter={counter}, poll_rate={poll_rate})"
+                f"Timeout exceeded in mm_wait_for_prefix (timeout={timeout}, elapsed={elapsed:.1f}, poll_rate={poll_rate})"
             ) from None
+
+        logger.warning(
+            f"waiting for cc commands with prefix '{prefix}' "
+            f"(elapsed={elapsed:.1f}s, timeout={timeout}) in mm_wait_for_prefix"
+        )
 
         if debug:
             print_msg(
-                f"Waiting {poll_rate} seconds before checking command for prefix '{prefix}' in mm_wait_for_prefix (timeout={timeout}, counter={counter})"
+                f"Waiting {poll_rate} seconds before checking command for prefix '{prefix}' in mm_wait_for_prefix (timeout={timeout}, elapsed={elapsed:.1f})"
             )
 
         time.sleep(poll_rate)
-        counter += 1
 
 
 def mm_get_cc_responses(mm: minimega.minimega, id_or_prefix_or_all: str) -> list[dict]:
@@ -704,10 +814,10 @@ def mm_last_command(mm: minimega.minimega) -> dict:
 
 
 def mm_vm_uuid(mm: minimega.minimega, name: str) -> str | None:
-    info = mm.vm_info(summary="summary")
+    info = mm_cc_all_hosts(mm, mm.vm_info, summary="summary")
 
     for host in info:
-        for vm in host["Tabular"]:
+        for vm in host.get("Tabular") or []:
             if vm[1] == name:
                 return vm[4]
 
