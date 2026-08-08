@@ -162,6 +162,12 @@ func configure(log *slog.Logger, exp *types.Experiment) error {
 		amd.MirrorBridge = exp.Spec.DefaultBridge()
 	}
 
+	// Validate external destinations early (IP format and protocol only; VLANs
+	// are validated in post-start once experiment status is available).
+	if err = validateExternalDestinations(amd.External); err != nil {
+		return fmt.Errorf("validating external destinations: %w", err)
+	}
+
 	nw, err := mirrorNet(log, &amd)
 	if err != nil {
 		return fmt.Errorf("determining mirror network: %w", err)
@@ -286,6 +292,10 @@ func preStart(log *slog.Logger, exp *types.Experiment, dryrun bool) error {
 		_ = deleteMirror(log, cfg.MirrorName, cfg.MirrorBridge, cluster)
 	}
 
+	for _, cfg := range status.ExternalMirrors {
+		_ = deleteMirror(log, cfg.MirrorName, cfg.MirrorBridge, cluster)
+	}
+
 	// Ignoring errors here since in most cases all the taps would have already
 	// been removed when the previous experiment was stopped.
 	_ = deleteTap(log, status.TapName, exp.Metadata.Name, cluster)
@@ -320,9 +330,10 @@ func postStart(log *slog.Logger, exp *types.Experiment, dryrun bool) error {
 
 	status := MirrorAppStatus{
 		// Tap name is random, yet descriptive to the fact that it's a mirror tap.
-		TapName: util.RandomString(tapNameLength) + "-mirror",
-		Subnet:  nw.Masked().String(),
-		Mirrors: make(map[string]MirrorConfig),
+		TapName:         util.RandomString(tapNameLength) + "-mirror",
+		Subnet:          nw.Masked().String(),
+		Mirrors:         make(map[string]MirrorConfig),
+		ExternalMirrors: make(map[string]MirrorConfig),
 	}
 
 	defer func() {
@@ -338,6 +349,11 @@ func postStart(log *slog.Logger, exp *types.Experiment, dryrun bool) error {
 		for _, mirror := range status.Mirrors {
 			_ = deleteMirror(log, mirror.MirrorName, mirror.MirrorBridge, cluster)
 		}
+
+		// clean up any external mirrors already created
+		for _, mirror := range status.ExternalMirrors {
+			_ = deleteMirror(log, mirror.MirrorName, mirror.MirrorBridge, cluster)
+		}
 	}()
 
 	err = createMirrorTaps(log, exp, amd, nw, status, cluster, dryrun)
@@ -346,6 +362,11 @@ func postStart(log *slog.Logger, exp *types.Experiment, dryrun bool) error {
 	}
 
 	err = setupMirrors(log, exp, app, amd, status, cluster, dryrun)
+	if err != nil {
+		return err
+	}
+
+	err = setupExternalMirrors(log, exp, amd, status, cluster, dryrun)
 	if err != nil {
 		return err
 	}
@@ -677,6 +698,176 @@ func createGRETunnel(
 	return nil
 }
 
+// validateExternalDestinations checks IP format, protocol support, and absence
+// of obvious configuration errors for external mirror destinations. VLAN
+// existence is checked later in setupExternalMirrors once experiment status is
+// populated.
+func validateExternalDestinations(dests []ExternalDestination) error {
+	seen := make(map[string]struct{})
+
+	for _, dest := range dests {
+		if _, err := netaddr.ParseIP(dest.IP); err != nil {
+			return fmt.Errorf("invalid external destination IP %q: %w", dest.IP, err)
+		}
+
+		if !slices.Contains(SupportedExternalProtocols, dest.Protocol) {
+			return fmt.Errorf(
+				"unsupported external protocol %q for destination %s (supported: %s)",
+				dest.Protocol,
+				dest.IP,
+				strings.Join(SupportedExternalProtocols, ", "),
+			)
+		}
+
+		if len(dest.Metadata.VLANs) == 0 {
+			return fmt.Errorf("no VLANs specified for external destination %s", dest.IP)
+		}
+
+		if _, dup := seen[dest.IP]; dup {
+			return fmt.Errorf("duplicate external destination %s", dest.IP)
+		}
+
+		seen[dest.IP] = struct{}{}
+	}
+
+	return nil
+}
+
+// externalPortName derives a deterministic, collision-resistant OVS port/mirror
+// name (≤15 chars) from an IPv4 address by encoding its four octets as hex.
+func externalPortName(ip netaddr.IP) string {
+	a := ip.Unmap().As4()
+	return fmt.Sprintf("ext-%02x%02x%02x%02x", a[0], a[1], a[2], a[3])
+}
+
+func setupExternalMirrors(
+	log *slog.Logger,
+	exp *types.Experiment,
+	amd MirrorAppMetadataV1,
+	status MirrorAppStatus,
+	cluster map[string][]string,
+	dryrun bool,
+) error {
+	for _, dest := range amd.External {
+		ip, err := netaddr.ParseIP(dest.IP)
+		if err != nil {
+			return fmt.Errorf("invalid external destination IP %q: %w", dest.IP, err)
+		}
+
+		// Validate that each requested VLAN exists in the experiment.
+		for _, vlan := range dest.Metadata.VLANs {
+			if _, ok := exp.Status.VLANs()[vlan]; !ok {
+				return fmt.Errorf("unknown VLAN %q for external destination %s", vlan, dest.IP)
+			}
+		}
+
+		name := externalPortName(ip)
+
+		log.Info("setting up external mirror", "to", dest.IP, "protocol", dest.Protocol, "vlans", dest.Metadata.VLANs)
+
+		status.ExternalMirrors[dest.IP] = MirrorConfig{
+			MirrorName:   name,
+			MirrorBridge: amd.MirrorBridge,
+			IP:           ip.String(),
+		}
+
+		for clusterHost := range cluster {
+			if err = setupExternalTunnelAndMirror(
+				log, exp, amd, dest, name, ip, clusterHost, dryrun,
+			); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func setupExternalTunnelAndMirror(
+	log *slog.Logger,
+	exp *types.Experiment,
+	amd MirrorAppMetadataV1,
+	dest ExternalDestination,
+	name string,
+	targetIP netaddr.IP,
+	clusterHost string,
+	dryrun bool,
+) error {
+	log.Info("creating external GRE port", "name", name, "to", dest.IP, "host", clusterHost)
+
+	cmd := fmt.Sprintf(
+		`ovs-vsctl add-port %s %s -- set interface %s type=gre options:remote_ip=%s`,
+		amd.MirrorBridge, name, name, targetIP,
+	)
+
+	if dryrun {
+		log.Debug("[DRYRUN] external GRE tunnel command", "cmd", cmd)
+	} else {
+		if err := mm.MeshShell(clusterHost, cmd); err != nil {
+			return fmt.Errorf(
+				"adding external GRE tunnel %s from cluster host %s: %w",
+				name, clusterHost, err,
+			)
+		}
+	}
+
+	command := buildExternalMirrorCommand(log, exp.Status.VLANs(), name, amd.MirrorBridge, name, dest.Metadata.VLANs)
+	if command == nil {
+		return nil
+	}
+
+	log.Info("creating external mirror", "name", name, "for", dest.IP, "host", clusterHost)
+
+	if !dryrun {
+		if err := mm.MeshShell(clusterHost, strings.Join(command, " -- ")); err != nil {
+			return fmt.Errorf(
+				"adding external mirror %s on cluster host %s: %w",
+				name, clusterHost, err,
+			)
+		}
+	}
+
+	return nil
+}
+
+// buildExternalMirrorCommand creates an ovs-vsctl command that mirrors all
+// traffic on the given VLAN aliases to the named output port. Unlike
+// buildMirrorCommand it does not filter by VM tap; instead it uses
+// select-vlan to capture all traffic on those VLANs. vlansByAlias maps
+// VLAN alias names to their numeric IDs (from exp.Status.VLANs()).
+func buildExternalMirrorCommand(
+	log *slog.Logger,
+	vlansByAlias map[string]int,
+	name, bridge, port string,
+	vlanAliases []string,
+) []string {
+	var vlanIDs []string
+
+	for _, vlan := range vlanAliases {
+		id, ok := vlansByAlias[vlan]
+		if ok {
+			vlanIDs = append(vlanIDs, strconv.Itoa(id))
+		}
+	}
+
+	if len(vlanIDs) == 0 {
+		log.Warn("no VLAN IDs resolved for external mirror", "name", name, "vlans", vlanAliases)
+
+		return nil
+	}
+
+	return []string{
+		"ovs-vsctl",
+		"--id=@o get port " + port,
+		fmt.Sprintf(
+			`--id=@m create mirror name=%s select-vlan=%s output-port=@o`,
+			name,
+			strings.Join(vlanIDs, ","),
+		),
+		fmt.Sprintf(`add bridge %s mirrors @m`, bridge),
+	}
+}
+
 func filterVMs(
 	log *slog.Logger,
 	clusterVMs []string,
@@ -759,6 +950,13 @@ func cleanup(log *slog.Logger, exp *types.Experiment, dryrun bool) error {
 		err = deleteMirror(log, cfg.MirrorName, cfg.MirrorBridge, cluster)
 		if err != nil {
 			log.Error("removing mirror from cluster", "mirror", cfg.MirrorName, "err", err)
+		}
+	}
+
+	for _, cfg := range status.ExternalMirrors {
+		err = deleteMirror(log, cfg.MirrorName, cfg.MirrorBridge, cluster)
+		if err != nil {
+			log.Error("removing external mirror from cluster", "mirror", cfg.MirrorName, "err", err)
 		}
 	}
 

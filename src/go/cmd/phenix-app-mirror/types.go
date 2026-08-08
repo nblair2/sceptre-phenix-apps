@@ -29,6 +29,7 @@ type MirrorAppMetadataV1 struct {
 		Direction  int  `mapstructure:"direction"`
 		HardwareID int  `mapstructure:"hwid"`
 	} `mapstructure:"erspan"`
+	External []ExternalDestination `mapstructure:"external"`
 }
 
 func (md *MirrorAppMetadataV1) Upgrade(old MirrorAppMetadata) {
@@ -65,10 +66,30 @@ type MirrorHostMetadata struct {
 	MirrorRouted bool     `mapstructure:"forceMirrorRouted"`
 }
 
+// ExternalDestMetadata holds the per-destination VLAN list.
+type ExternalDestMetadata struct {
+	VLANs []string `mapstructure:"vlans"`
+}
+
+// ExternalDestination describes a single external mirror target.
+type ExternalDestination struct {
+	IP       string               `mapstructure:"ip"`
+	Protocol string               `mapstructure:"protocol"`
+	Metadata ExternalDestMetadata `mapstructure:"metadata"`
+}
+
+// SupportedExternalProtocols lists the OVS tunnel types accepted for external
+// mirror destinations. Only "gre" is listed because ERSPAN and GTP-U require
+// kernel / OVS version support that cannot be assumed across all deployments;
+// the existing ERSPAN path is still available via the per-host directGRE /
+// erspan configuration blocks.
+var SupportedExternalProtocols = []string{"gre"}
+
 type MirrorAppStatus struct {
-	TapName string                  `mapstructure:"tapName" structs:"tapName"`
-	Subnet  string                  `mapstructure:"subnet"  structs:"subnet"`
-	Mirrors map[string]MirrorConfig `mapstructure:"mirrors" structs:"mirrors"`
+	TapName         string                  `mapstructure:"tapName"         structs:"tapName"`
+	Subnet          string                  `mapstructure:"subnet"          structs:"subnet"`
+	Mirrors         map[string]MirrorConfig `mapstructure:"mirrors"         structs:"mirrors"`
+	ExternalMirrors map[string]MirrorConfig `mapstructure:"externalMirrors" structs:"externalMirrors"`
 }
 
 type MirrorConfig struct {
