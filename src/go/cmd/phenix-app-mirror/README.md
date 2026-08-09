@@ -37,7 +37,7 @@ mirror destination.
 #### External IPv4 destinations
 
 The `mirror` app can also forward mirrored VLAN traffic to external IPv4
-addresses (e.g. a dedicated physical capture appliance) via a GRE tunnel.
+addresses (e.g. a dedicated physical capture appliance) via a GRE or ERSPAN tunnel.
 External destinations are configured under `metadata.external` in the app
 block and are independent of the `hosts` list.
 
