@@ -114,9 +114,17 @@ func TestValidateExternalDestinations_Valid(t *testing.T) {
 			Protocol: "gre",
 			Metadata: ExternalDestMetadata{VLANs: []string{"WAN", "LAN2"}},
 		},
+		{
+			IP:       "10.0.0.3",
+			Protocol: "erspan",
+			Metadata: ExternalDestMetadata{VLANs: []string{"MONITOR"}},
+		},
 	}
 
-	assert.NoError(t, validateExternalDestinations(dests))
+	amd := MirrorAppMetadataV1{}
+	amd.ERSPAN.Version = 1
+
+	assert.NoError(t, validateExternalDestinations(amd, dests))
 }
 
 func TestValidateExternalDestinations_InvalidIP(t *testing.T) {
@@ -130,10 +138,26 @@ func TestValidateExternalDestinations_InvalidIP(t *testing.T) {
 		},
 	}
 
-	assert.Error(t, validateExternalDestinations(dests))
+	assert.Error(t, validateExternalDestinations(MirrorAppMetadataV1{}, dests))
 }
 
 func TestValidateExternalDestinations_UnsupportedProtocol(t *testing.T) {
+	t.Parallel()
+
+	dests := []ExternalDestination{
+		{
+			IP:       "1.2.3.4",
+			Protocol: "gtpu",
+			Metadata: ExternalDestMetadata{VLANs: []string{"LAN"}},
+		},
+	}
+
+	err := validateExternalDestinations(MirrorAppMetadataV1{}, dests)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported external protocol")
+}
+
+func TestValidateExternalDestinations_ERSPANMissingVersion(t *testing.T) {
 	t.Parallel()
 
 	dests := []ExternalDestination{
@@ -144,9 +168,9 @@ func TestValidateExternalDestinations_UnsupportedProtocol(t *testing.T) {
 		},
 	}
 
-	err := validateExternalDestinations(dests)
+	err := validateExternalDestinations(MirrorAppMetadataV1{}, dests)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported external protocol")
+	assert.Contains(t, err.Error(), "metadata.erspan.version")
 }
 
 func TestValidateExternalDestinations_EmptyVLANs(t *testing.T) {
@@ -160,7 +184,7 @@ func TestValidateExternalDestinations_EmptyVLANs(t *testing.T) {
 		},
 	}
 
-	err := validateExternalDestinations(dests)
+	err := validateExternalDestinations(MirrorAppMetadataV1{}, dests)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no VLANs specified")
 }
@@ -181,7 +205,7 @@ func TestValidateExternalDestinations_DuplicateIP(t *testing.T) {
 		},
 	}
 
-	err := validateExternalDestinations(dests)
+	err := validateExternalDestinations(MirrorAppMetadataV1{}, dests)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "duplicate external destination")
 }
@@ -189,8 +213,8 @@ func TestValidateExternalDestinations_DuplicateIP(t *testing.T) {
 func TestValidateExternalDestinations_Empty(t *testing.T) {
 	t.Parallel()
 
-	assert.NoError(t, validateExternalDestinations(nil))
-	assert.NoError(t, validateExternalDestinations([]ExternalDestination{}))
+	assert.NoError(t, validateExternalDestinations(MirrorAppMetadataV1{}, nil))
+	assert.NoError(t, validateExternalDestinations(MirrorAppMetadataV1{}, []ExternalDestination{}))
 }
 
 // ---------------------------------------------------------------------------

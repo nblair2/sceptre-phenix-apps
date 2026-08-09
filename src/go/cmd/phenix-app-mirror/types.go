@@ -79,11 +79,8 @@ type ExternalDestination struct {
 }
 
 // SupportedExternalProtocols lists the OVS tunnel types accepted for external
-// mirror destinations. Only "gre" is listed because ERSPAN and GTP-U require
-// kernel / OVS version support that cannot be assumed across all deployments;
-// the existing ERSPAN path is still available via the per-host directGRE /
-// erspan configuration blocks.
-var SupportedExternalProtocols = []string{"gre"}
+// mirror destinations.
+var SupportedExternalProtocols = []string{"gre", "erspan"}
 
 type MirrorAppStatus struct {
 	TapName         string                  `mapstructure:"tapName"         structs:"tapName"`

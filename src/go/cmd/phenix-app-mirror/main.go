@@ -164,7 +164,7 @@ func configure(log *slog.Logger, exp *types.Experiment) error {
 
 	// Validate external destinations early (IP format and protocol only; VLANs
 	// are validated in post-start once experiment status is available).
-	if err = validateExternalDestinations(amd.External); err != nil {
+	if err = validateExternalDestinations(amd, amd.External); err != nil {
 		return fmt.Errorf("validating external destinations: %w", err)
 	}
 
@@ -702,7 +702,7 @@ func createGRETunnel(
 // of obvious configuration errors for external mirror destinations. VLAN
 // existence is checked later in setupExternalMirrors once experiment status is
 // populated.
-func validateExternalDestinations(dests []ExternalDestination) error {
+func validateExternalDestinations(amd MirrorAppMetadataV1, dests []ExternalDestination) error {
 	seen := make(map[string]struct{})
 
 	for _, dest := range dests {
@@ -721,6 +721,15 @@ func validateExternalDestinations(dests []ExternalDestination) error {
 
 		if len(dest.Metadata.VLANs) == 0 {
 			return fmt.Errorf("no VLANs specified for external destination %s", dest.IP)
+		}
+
+		if dest.Protocol == "erspan" && amd.ERSPAN.Version != 1 && amd.ERSPAN.Version != erspanVersion2 {
+			return fmt.Errorf(
+				"external destination %s uses erspan but metadata.erspan.version is %d (supported: 1, %d)",
+				dest.IP,
+				amd.ERSPAN.Version,
+				erspanVersion2,
+			)
 		}
 
 		if _, dup := seen[dest.IP]; dup {
@@ -793,22 +802,33 @@ func setupExternalTunnelAndMirror(
 	clusterHost string,
 	dryrun bool,
 ) error {
-	log.Info("creating external GRE port", "name", name, "to", dest.IP, "host", clusterHost)
+	switch dest.Protocol {
+	case "gre":
+		log.Info("creating external GRE port", "name", name, "to", dest.IP, "host", clusterHost)
 
-	cmd := fmt.Sprintf(
-		`ovs-vsctl add-port %s %s -- set interface %s type=gre options:remote_ip=%s`,
-		amd.MirrorBridge, name, name, targetIP,
-	)
+		cmd := fmt.Sprintf(
+			`ovs-vsctl add-port %s %s -- set interface %s type=gre options:remote_ip=%s`,
+			amd.MirrorBridge, name, name, targetIP,
+		)
 
-	if dryrun {
-		log.Debug("[DRYRUN] external GRE tunnel command", "cmd", cmd)
-	} else {
-		if err := mm.MeshShell(clusterHost, cmd); err != nil {
-			return fmt.Errorf(
-				"adding external GRE tunnel %s from cluster host %s: %w",
-				name, clusterHost, err,
-			)
+		if dryrun {
+			log.Debug("[DRYRUN] external GRE tunnel command", "cmd", cmd)
+		} else {
+			if err := mm.MeshShell(clusterHost, cmd); err != nil {
+				return fmt.Errorf(
+					"adding external GRE tunnel %s from cluster host %s: %w",
+					name, clusterHost, err,
+				)
+			}
 		}
+	case "erspan":
+		log.Info("creating external ERSPAN port", "name", name, "to", dest.IP, "host", clusterHost)
+
+		if err := createERSPANTunnel(log, amd, name, targetIP, dest.IP, clusterHost, dryrun); err != nil {
+			return fmt.Errorf("adding external ERSPAN tunnel for %s: %w", dest.IP, err)
+		}
+	default:
+		return fmt.Errorf("unsupported external protocol %q", dest.Protocol)
 	}
 
 	command := buildExternalMirrorCommand(log, exp.Status.VLANs(), name, amd.MirrorBridge, name, dest.Metadata.VLANs)

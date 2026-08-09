@@ -64,12 +64,20 @@ spec:
         metadata:
           vlans:
           - EXP_1
+      - ip: 10.10.10.51
+        protocol: erspan
+        metadata:
+          vlans:
+          - EXP_1
+      erspan:
+        version: 1
+        index: 100
 ```
 
 For each entry under `metadata.external` the app will:
 
-1. Create a GRE tunnel OVS port on every cluster host pointing to the
-   external `ip`.
+1. Create a GRE or ERSPAN tunnel OVS port on every cluster host pointing to
+   the external `ip`.
 2. Create an OVS mirror on each cluster host that selects all traffic on the
    listed VLANs and forwards it through the tunnel.
 
@@ -77,17 +85,23 @@ The OVS port and mirror are named deterministically as
 `ext-<hex-encoded-IPv4>` (e.g. `ext-c0a8c0a8` for `192.168.192.168`), which
 keeps names ≤15 characters and avoids collisions between destinations.
 
-**Supported protocols:** `gre` only.  ERSPAN and GTP-U require specific kernel
-and OVS version support that cannot be assumed across all deployments; the
-existing per-host `erspan` configuration block is still available for VM
-destinations that need ERSPAN.
+**Supported protocols:** `gre`, `erspan`.
+
+**ERSPAN requirements for `metadata.external`:**
+- `metadata.erspan.version` must be set to `1` or `2`.
+- If `version: 1`, configure `metadata.erspan.index`.
+- If `version: 2`, configure `metadata.erspan.direction` and
+  `metadata.erspan.hwid`.
+- OVS and host kernel must support `type=erspan` and the corresponding ERSPAN
+  options (`erspan_ver`, plus `erspan_idx` for v1, or `erspan_dir`/`erspan_hwid`
+  for v2).
 
 **Host networking prerequisite:** the physical network path from every cluster
 host to the external IP must be routable.  The cluster host's default network
 interface (not the OVS bridge) is used as the GRE tunnel source.
 
 **Limitations:**
-- Only IPv4 external destinations are supported (GRE over IPv4).
+- Only IPv4 external destinations are supported.
 - Each external `ip` must be unique within the `external` list.
 - VLANs listed under `metadata.vlans` must exist in the experiment topology.
 - External mirrors capture all traffic on the selected VLANs, not just traffic
