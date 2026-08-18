@@ -1140,6 +1140,7 @@ class Sceptre(AppBase):
             pub_endpoint = provider.metadata.get(
                 "publish_endpoint", "udp://*;239.0.0.1:40000"
             )
+            subtype = fd_.metadata.get("subtype", "single")
 
             fd_interfaces = {}
             for _, iface in enumerate(fd_.topology.network.interfaces):
@@ -1221,6 +1222,7 @@ class Sceptre(AppBase):
                 devices_by_protocol=parsed.devices_by_protocol,
                 publish_endpoint=pub_endpoint,
                 server_endpoint=srv_endpoint,
+                device_subtype=subtype,
                 reg_config=reg_config,
                 counter=fep_counter,
             )
