@@ -1,0 +1,508 @@
+{
+  "custom": {},
+  "params": {
+    "deviceName": "value",
+    "index": 0
+  },
+  "propConfig": {
+    "params.deviceName": {
+      "paramDirection": "input",
+      "persistent": true
+    },
+    "params.index": {
+      "paramDirection": "input",
+      "persistent": true
+    }
+  },
+  "props": {
+    "defaultSize": {
+      "height": 500,
+      "width": 400
+    }
+  },
+  "root": {
+    "children": [
+      {
+        "meta": {
+          "name": "LabelCommand"
+        },
+        "position": {
+          "height": 32,
+          "width": 70,
+          "x": 20,
+          "y": 15
+        },
+        "props": {
+          "text": "Command:"
+        },
+        "type": "ia.display.label"
+      },
+      {
+        "meta": {
+          "name": "CommandDropdown"
+        },
+        "position": {
+          "height": 36,
+          "width": 256,
+          "x": 121,
+          "y": 13
+        },
+        "props": {
+          "options": [
+            {
+              "label": "CROB",
+              "value": "crob"
+            },
+            {
+              "label": "Data Poll",
+              "value": "poll"
+            }
+          ],
+          "value": "crob"
+        },
+        "type": "ia.input.dropdown"
+      },
+      {
+        "children": [
+          {
+            "meta": {
+              "name": "LabelIndex"
+            },
+            "position": {
+              "height": 32,
+              "width": 70,
+              "x": 20,
+              "y": 0
+            },
+            "props": {
+              "text": "Index:"
+            },
+            "type": "ia.display.label"
+          },
+          {
+            "meta": {
+              "name": "IndexField"
+            },
+            "position": {
+              "height": 32,
+              "width": 150,
+              "x": 227,
+              "y": 0
+            },
+            "propConfig": {
+              "props.value": {
+                "binding": {
+                  "config": {
+                    "path": "view.params.index"
+                  },
+                  "type": "property"
+                }
+              }
+            },
+            "type": "ia.input.numeric-entry-field"
+          },
+          {
+            "meta": {
+              "name": "LabelMode"
+            },
+            "position": {
+              "height": 32,
+              "width": 70,
+              "x": 20,
+              "y": 49
+            },
+            "props": {
+              "text": "Mode:"
+            },
+            "type": "ia.display.label"
+          },
+          {
+            "meta": {
+              "name": "ModeDropdown"
+            },
+            "position": {
+              "height": 36,
+              "width": 256,
+              "x": 121,
+              "y": 47
+            },
+            "props": {
+              "options": [
+                {
+                  "label": "Select/Operate",
+                  "value": "Select"
+                },
+                {
+                  "label": "Direct Operate",
+                  "value": "Direct"
+                }
+              ],
+              "value": "Select"
+            },
+            "type": "ia.input.dropdown"
+          },
+          {
+            "meta": {
+              "name": "LabelOperation"
+            },
+            "position": {
+              "height": 32,
+              "width": 70,
+              "x": 20,
+              "y": 100
+            },
+            "props": {
+              "text": "Operation:"
+            },
+            "type": "ia.display.label"
+          },
+          {
+            "meta": {
+              "name": "OpTypeDropdown"
+            },
+            "position": {
+              "height": 36,
+              "width": 256,
+              "x": 121,
+              "y": 96
+            },
+            "props": {
+              "options": [
+                {
+                  "label": "NUL",
+                  "value": 0
+                },
+                {
+                  "label": "PULSE_ON",
+                  "value": 1
+                },
+                {
+                  "label": "PULSE_OFF",
+                  "value": 2
+                },
+                {
+                  "label": "LATCH_ON",
+                  "value": 3
+                },
+                {
+                  "label": "LATCH_OFF",
+                  "value": 4
+                }
+              ],
+              "value": 3
+            },
+            "type": "ia.input.dropdown"
+          },
+          {
+            "meta": {
+              "name": "LabelTCC"
+            },
+            "position": {
+              "height": 32,
+              "width": 70,
+              "x": 20,
+              "y": 147
+            },
+            "props": {
+              "text": "TCC:"
+            },
+            "type": "ia.display.label"
+          },
+          {
+            "meta": {
+              "name": "TccDropdown"
+            },
+            "position": {
+              "height": 36,
+              "width": 256,
+              "x": 121,
+              "y": 143
+            },
+            "props": {
+              "options": [
+                {
+                  "label": "NUL",
+                  "value": 0
+                },
+                {
+                  "label": "CLOSE",
+                  "value": 1
+                },
+                {
+                  "label": "TRIP",
+                  "value": 2
+                }
+              ],
+              "value": 0
+            },
+            "type": "ia.input.dropdown"
+          },
+          {
+            "meta": {
+              "name": "LabelCount"
+            },
+            "position": {
+              "height": 32,
+              "width": 70,
+              "x": 20,
+              "y": 200
+            },
+            "props": {
+              "text": "Count:"
+            },
+            "type": "ia.display.label"
+          },
+          {
+            "meta": {
+              "name": "CountField"
+            },
+            "position": {
+              "height": 32,
+              "width": 150,
+              "x": 227,
+              "y": 193
+            },
+            "props": {
+              "inputBounds": {
+                "minimum": 0
+              },
+              "value": 1
+            },
+            "type": "ia.input.numeric-entry-field"
+          },
+          {
+            "meta": {
+              "name": "LabelOnTime"
+            },
+            "position": {
+              "height": 32,
+              "width": 70,
+              "x": 20,
+              "y": 244
+            },
+            "props": {
+              "text": "On Time:"
+            },
+            "type": "ia.display.label"
+          },
+          {
+            "meta": {
+              "name": "OnTimeField"
+            },
+            "position": {
+              "height": 32,
+              "width": 150,
+              "x": 227,
+              "y": 239
+            },
+            "props": {
+              "inputBounds": {
+                "minimum": 0
+              },
+              "value": 0
+            },
+            "type": "ia.input.numeric-entry-field"
+          },
+          {
+            "meta": {
+              "name": "LabelOffTime"
+            },
+            "position": {
+              "height": 32,
+              "width": 70,
+              "x": 20,
+              "y": 288
+            },
+            "props": {
+              "text": "Off Time:"
+            },
+            "type": "ia.display.label"
+          },
+          {
+            "meta": {
+              "name": "OffTimeField"
+            },
+            "position": {
+              "height": 32,
+              "width": 150,
+              "x": 227,
+              "y": 288
+            },
+            "props": {
+              "inputBounds": {
+                "minimum": 0
+              },
+              "value": 0
+            },
+            "type": "ia.input.numeric-entry-field"
+          }
+        ],
+        "meta": {
+          "name": "crobParams"
+        },
+        "position": {
+          "height": 330,
+          "width": 400,
+          "x": 0,
+          "y": 60
+        },
+        "propConfig": {
+          "meta.visible": {
+            "binding": {
+              "config": {
+                "expression": "{../CommandDropdown.props.value} = 'crob'"
+              },
+              "type": "expr"
+            }
+          }
+        },
+        "type": "ia.container.coord"
+      },
+      {
+        "children": [
+          {
+            "meta": {
+              "name": "LabelClasses"
+            },
+            "position": {
+              "height": 32,
+              "width": 70,
+              "x": 20,
+              "y": 0
+            },
+            "props": {
+              "text": "Classes:"
+            },
+            "type": "ia.display.label"
+          },
+          {
+            "meta": {
+              "name": "Class1"
+            },
+            "position": {
+              "height": 24,
+              "width": 150,
+              "x": 121,
+              "y": 4
+            },
+            "props": {
+              "selected": true,
+              "text": "Class 1"
+            },
+            "type": "ia.input.checkbox"
+          },
+          {
+            "meta": {
+              "name": "Class2"
+            },
+            "position": {
+              "height": 24,
+              "width": 150,
+              "x": 121,
+              "y": 44
+            },
+            "props": {
+              "selected": true,
+              "text": "Class 2"
+            },
+            "type": "ia.input.checkbox"
+          },
+          {
+            "meta": {
+              "name": "Class3"
+            },
+            "position": {
+              "height": 24,
+              "width": 150,
+              "x": 121,
+              "y": 84
+            },
+            "props": {
+              "selected": true,
+              "text": "Class 3"
+            },
+            "type": "ia.input.checkbox"
+          },
+          {
+            "meta": {
+              "name": "Class0"
+            },
+            "position": {
+              "height": 24,
+              "width": 150,
+              "x": 121,
+              "y": 124
+            },
+            "props": {
+              "selected": true,
+              "text": "Class 0 (static)"
+            },
+            "type": "ia.input.checkbox"
+          }
+        ],
+        "meta": {
+          "name": "pollParams"
+        },
+        "position": {
+          "height": 330,
+          "width": 400,
+          "x": 0,
+          "y": 60
+        },
+        "propConfig": {
+          "meta.visible": {
+            "binding": {
+              "config": {
+                "expression": "{../CommandDropdown.props.value} = 'poll'"
+              },
+              "type": "expr"
+            }
+          }
+        },
+        "type": "ia.container.coord"
+      },
+      {
+        "events": {
+          "component": {
+            "onActionPerformed": {
+              "config": {
+                "script": "\tdev = self.view.params.deviceName\n\tcmd = self.getSibling(\"CommandDropdown\").props.value\n\t\n\ttry:\n\t\tif cmd == \"poll\":\n\t\t\tpoll = self.getSibling(\"pollParams\")\n\t\t\tclasses = [c for c in (1, 2, 3, 0) if poll.getChild(\"Class%d\" % c).props.selected]\n\t\t\tsystem.dnp.demandPoll(dev, classes)\n\t\telse:\n\t\t\tcrob = self.getSibling(\"crobParams\")\n\t\t\tidx = crob.getChild(\"IndexField\").props.value\n\t\t\tmode = crob.getChild(\"ModeDropdown\").props.value\n\t\t\top = crob.getChild(\"OpTypeDropdown\").props.value\n\t\t\ttcc = crob.getChild(\"TccDropdown\").props.value\n\t\t\tcnt = crob.getChild(\"CountField\").props.value\n\t\t\tonT = crob.getChild(\"OnTimeField\").props.value\n\t\t\toffT = crob.getChild(\"OffTimeField\").props.value\n\t\t\tif mode == \"Select\":\n\t\t\t\tsystem.dnp.selectOperateBinary(dev, idx, tcc, op, cnt, onT, offT)\n\t\t\telse:\n\t\t\t\tsystem.dnp.directOperateBinary(dev, idx, tcc, op, cnt, onT, offT)\n\t\t\n\t\tself.getSibling(\"ResultLabel\").props.text = \"Sent OK\"\n\texcept Exception as e:\n\t\tself.getSibling(\"ResultLabel\").props.text = \"FAILED: \" + str(e)\n\t"
+              },
+              "scope": "G",
+              "type": "script"
+            }
+          }
+        },
+        "meta": {
+          "name": "SendButton"
+        },
+        "position": {
+          "height": 34,
+          "width": 250,
+          "x": 127,
+          "y": 395
+        },
+        "props": {
+          "text": "Send"
+        },
+        "type": "ia.input.button"
+      },
+      {
+        "meta": {
+          "name": "ResultLabel"
+        },
+        "position": {
+          "height": 32,
+          "width": 76,
+          "x": 162,
+          "y": 454
+        },
+        "type": "ia.display.label"
+      }
+    ],
+    "meta": {
+      "name": "root"
+    },
+    "type": "ia.container.coord"
+  }
+}
