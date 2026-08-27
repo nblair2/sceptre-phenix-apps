@@ -41,6 +41,7 @@ dependencies = [
 [project.scripts]
 phenix-app-caldera = "phenix_apps.apps.caldera.__main__:main"
 phenix-app-helics = "phenix_apps.apps.helics.__main__:main"
+phenix-app-ignition = "phenix_apps.apps.ignition.__main__:main"
 phenix-app-ot-sim = "phenix_apps.apps.otsim.__main__:main"
 phenix-app-protonuke = "phenix_apps.apps.protonuke.__main__:main"
 phenix-app-scale = "phenix_apps.apps.scale.__main__:main"
@@ -107,11 +108,11 @@ phenix_apps = [
     "apps/scorch/opcexport/*.ps1",
     "apps/scorch/opcexport/*.zip",
     "apps/scorch/opcexport/*.exe",
-    # sceptre reads all three of these at runtime; without them an installed
-    # wheel cannot build a field device, a SunSpec device, or a SCADA project.
+    # sceptre reads all three of these at runtime
     "apps/sceptre/configs/*.yaml",
     "apps/sceptre/protocols/sunspec/models/smdx/*",
     "apps/sceptre/templates/mydesigner/**/*",
+    "apps/ignition/templates/**/*"
 ]
 
 # dynamically read version from phenix_apps.__version__
@@ -126,10 +127,11 @@ indent-width = 4
 # coupled with default on phenix image (ubuntu:24.04)
 target-version = "py312"
 
-# exclude 'vendored' directory outright
+# exclude 'vendored' directories outright
 exclude = [
     "phenix_apps/apps/sceptre/protocols/sunspec/models/smdx/",
-    "phenix_apps/apps/sceptre/templates/mydesigner/"
+    "phenix_apps/apps/sceptre/templates/mydesigner/",
+    "phenix_apps/apps/ignition/templates/", # Jython 2.7 scripts
 ]
 
 [tool.ruff.lint]
@@ -187,5 +189,6 @@ exclude = [
     "dist",
     "phenix_apps/apps/__init__.py",
     "phenix_apps/common/",
-    "phenix_apps/apps/sceptre/templates/mydesigner/"
+    "phenix_apps/apps/sceptre/templates/mydesigner/",
+    "phenix_apps/apps/ignition/templates/"
 ]
