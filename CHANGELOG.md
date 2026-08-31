@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SCEPTRE App**: `metadata.simulator` matches case-insensitively in both stages, as validation already did; a miscased name used to silently get the default config.
 - **Build System**: `package-data` now ships the SunSpec models, the `mydesigner` SCADA tree and the infrastructure table; an installed wheel was missing all three.
 
+### Removed
+- **SCEPTRE App**: The `reg_config` manual register-map path. It was dead code: the app never populated it, so every device always took the automatic numbering branch. Output is unchanged.
+
 ### Fixed
 - **SCEPTRE App**: Every `sunspec` inverter raised `KeyError`: the SunSpec register mappings are keyed `PowerDistribution` but received `power-distribution`. The whole protocol was unusable.
 - **SCEPTRE App**: `fep` hosts raised `TypeError`, built without the required `device_subtype`.

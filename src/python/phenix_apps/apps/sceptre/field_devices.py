@@ -46,13 +46,12 @@ class FieldDevices(PreStartState):
         """Build a FieldDeviceConfig per fd-server and render its config + startup script.
 
         Reads: provider_map
-        Writes: fd_server_configs, fdlist, power_object_list, reg_config
+        Writes: fd_server_configs, fdlist, power_object_list
         """
 
         self.fd_server_configs = {}
         self.fdlist = {}
         self.power_object_list = []
-        self.reg_config = {}
 
         needrestart = bool(self.hosts("ignition"))
 
@@ -133,7 +132,6 @@ class FieldDevices(PreStartState):
                 publish_endpoint=pub_endpoint,
                 server_endpoint=srv_endpoint,
                 device_subtype=subtype,
-                reg_config=self.reg_config,
                 counter=fd_counter,
             )
 
@@ -229,7 +227,7 @@ class FieldDevices(PreStartState):
         A fep adopts the devices of the fd-servers in connected_rtus and pops them
         out of self.fd_server_configs, so OPC and ELK see the fep, not the RTUs.
 
-        Reads: fd_server_configs, provider_map, reg_config
+        Reads: fd_server_configs, provider_map
         Writes: fd_server_configs
         """
 
@@ -306,7 +304,6 @@ class FieldDevices(PreStartState):
                 publish_endpoint=pub_endpoint,
                 server_endpoint=srv_endpoint,
                 device_subtype=fd_.metadata.get("subtype", "single"),
-                reg_config=self.reg_config,
                 counter=fep_counter,
             )
             self.fd_server_configs[fep_config.name] = fep_config

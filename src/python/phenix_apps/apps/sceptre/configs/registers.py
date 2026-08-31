@@ -5,7 +5,7 @@ address in the protocol's address space. Kept apart from infrastructures.py so
 that file is the table and this one is the logic.
 """
 
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import phenix_apps.apps.sceptre.protocols.sunspec as sunspec
 
@@ -16,7 +16,6 @@ class Device:
         device_type: str,
         device_name: str,
         protocol: str,
-        reg_config: dict[str, Any] | list[dict[str, Any]],
         fields: dict[str, list[str | int]],
         range_: tuple[float, float],
         infrastructure: str,
@@ -24,7 +23,6 @@ class Device:
         self.device_type = device_type
         self.device_name = device_name
         self.protocol = protocol
-        self.reg_config = reg_config
         self.fields = fields
         self.range = range_
         self.infrastructure = infrastructure
@@ -50,7 +48,6 @@ class Device:
                     self.device_type,
                     self.protocol,
                     self.range,
-                    self.reg_config,
                 )
                 for field in fields
             ]
@@ -104,7 +101,6 @@ class Register:
         devtype: str,
         protocol: str,
         range_: tuple[float, float],
-        reg_config: dict[str, Any] | list[dict[str, Any]],
     ) -> None:
         self.devname = devname
         self.field = field
@@ -115,52 +111,16 @@ class Register:
         self.range = range_
 
         # Protocol-wide register numbers used for DNP3 registers
-        if not bool(reg_config):
-            if (
-                "dnp3" in self.protocol
-                or "bacnet" in self.protocol
-                or "iec60870-5-104" in self.protocol
-            ):
-                self.addr = type(self).addresses[self.protocol]
-                type(self).addresses[self.protocol] += 1
-            else:
-                self.addr = type(self).addresses[self.regtype]
-                type(self).addresses[self.regtype] += 1
+        if (
+            "dnp3" in self.protocol
+            or "bacnet" in self.protocol
+            or "iec60870-5-104" in self.protocol
+        ):
+            self.addr = type(self).addresses[self.protocol]
+            type(self).addresses[self.protocol] += 1
         else:
-            for config in reg_config:
-                if (
-                    self.fieldtype in config.keys()
-                    and self.devname == config["name"]
-                    and self.devtype == config["type"]
-                ):
-                    for item in config[self.fieldtype]:
-                        if (
-                            self.field == item["field"]
-                            and self.regtype == item["register_type"]
-                        ):
-                            register_number = item["register_number"]
-                            if (
-                                "dnp3" in self.protocol
-                                or "bacnet" in self.protocol
-                                or "iec60870-5-104" in self.protocol
-                            ):
-                                self.addr = type(self).addresses[self.protocol]
-                                type(self).addresses[self.protocol] = register_number
-                            else:
-                                self.addr = type(self).addresses[self.regtype]
-                                type(self).addresses[self.regtype] = register_number
-
-            # DEFAULT: if something isn't right
-            if (
-                "dnp3" in self.protocol
-                or "bacnet" in self.protocol
-                or "iec60870-5-104" in self.protocol
-            ):
-                self.addr = type(self).addresses[self.protocol]
-                type(self).addresses[self.protocol] += 1
-            else:
-                self.addr = type(self).addresses[self.regtype]
-                type(self).addresses[self.regtype] += 1
+            self.addr = type(self).addresses[self.regtype]
+            type(self).addresses[self.regtype] += 1
 
     @staticmethod
     def reset_addresses() -> None:

@@ -75,7 +75,7 @@ def render(infrastructure: str, device_type, protocol: str) -> str:
     Register.reset_addresses()
     try:
         device = get_fdconfig_class(infrastructure).create_device(
-            device_type, "dev-1", protocol, []
+            device_type, "dev-1", protocol
         )
     except Exception as exc:  # pinning current behaviour, whatever it is
         return f"raises {type(exc).__name__}"

@@ -103,9 +103,6 @@ class PreStartState(Stage):
         self.fd_server_configs: dict[str, Any] = {}
         self.fdlist: dict[str, dict[str, int]] = {}
 
-        # Never populated by the app today.
-        self.reg_config: dict[str, Any] = {}
-
         self.scada_hosts: list[Box] = []
         self.historian_hosts: list[Box] = []
         self.scada_ips: list[str] = []

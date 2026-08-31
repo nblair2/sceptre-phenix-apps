@@ -38,14 +38,9 @@ def get_fdconfig_class(infrastructure: str) -> type:
             publish_endpoint: str,
             server_endpoint: str,
             device_subtype: str,
-            reg_config: dict[str, Any],
             counter: int,
         ) -> None:
             super().__init__()
-            if name in reg_config.keys():
-                self.reg_config = reg_config[name]
-            else:
-                self.reg_config = {}
             self.provider = provider
             self.name = name
             self.ipaddr = interfaces.get("tcp", "")
@@ -68,7 +63,6 @@ def get_fdconfig_class(infrastructure: str) -> type:
                             devices_by_protocol[protocol],
                             type(self),
                             self.serial_dev.pop(0),
-                            self.reg_config,
                         )
                     )
                 else:
@@ -77,7 +71,6 @@ def get_fdconfig_class(infrastructure: str) -> type:
                             protocol,
                             devices_by_protocol[protocol],
                             type(self),
-                            self.reg_config,
                         )
                     )
             Register.reset_addresses()
@@ -92,18 +85,12 @@ class Protocol:
         protocol: str,
         devices: list[dict[str, Any]],
         infrastructure_class: type,
-        reg_config: dict[str, Any],
     ) -> None:
         self.protocol = protocol
-        self.devices = self.__generate_devices(
-            devices, infrastructure_class, reg_config
-        )
+        self.devices = self.__generate_devices(devices, infrastructure_class)
 
     def __generate_devices(
-        self,
-        devices: list[dict[str, Any]],
-        infrastructure_class: type,
-        reg_config: dict[str, Any],
+        self, devices: list[dict[str, Any]], infrastructure_class: type
     ) -> list[Device]:
         devices_list = []
         for device in devices:
@@ -112,22 +99,11 @@ class Protocol:
                 if key == "type" or key == "name":
                     continue
                 kwargs[key] = device[key]
-            if self.protocol in reg_config.keys():
-                devices_list.append(
-                    infrastructure_class.create_device(
-                        device["type"],
-                        device["name"],
-                        self.protocol,
-                        reg_config=reg_config[self.protocol],
-                        **kwargs,
-                    )
+            devices_list.append(
+                infrastructure_class.create_device(
+                    device["type"], device["name"], self.protocol, **kwargs
                 )
-            else:
-                devices_list.append(
-                    infrastructure_class.create_device(
-                        device["type"], device["name"], self.protocol, [], **kwargs
-                    )
-                )
+            )
         return devices_list
 
 
@@ -138,10 +114,9 @@ class SerialProtocol(Protocol):
         devices: list[dict[str, Any]],
         infrastructure_class: type,
         serial_dev: str,
-        reg_config: dict[str, Any],
     ) -> None:
         self.serial_dev = serial_dev
-        super().__init__(protocol, devices, infrastructure_class, reg_config)
+        super().__init__(protocol, devices, infrastructure_class)
 
 
 class OpcConfig:

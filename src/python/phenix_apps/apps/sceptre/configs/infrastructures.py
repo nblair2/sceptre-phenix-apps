@@ -48,7 +48,6 @@ class Infrastructure:
         device_type: str,
         device_name: str,
         protocol: str,
-        reg_config: dict[str, Any] | list[dict[str, Any]],
         **kwargs: list[str | int],
     ) -> Device:
         """Build one device. AppError if the type is not in the table.
@@ -70,7 +69,6 @@ class Infrastructure:
             device_type,
             device_name,
             protocol,
-            reg_config,
             fields={f: kwargs.get(f, spec.get(f, [])) for f in FIELD_TYPES},
             range_=spec.get("range", INFRASTRUCTURES[cls.INFRA]["range"]),
             infrastructure=cls.INFRA,
