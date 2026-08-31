@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Build System**: `package-data` now ships the SunSpec models, the `mydesigner` SCADA tree and the infrastructure table; an installed wheel was missing all three.
 
 ### Fixed
+- **SCEPTRE App**: Every `sunspec` inverter raised `KeyError`: the SunSpec register mappings are keyed `PowerDistribution` but received `power-distribution`. The whole protocol was unusable.
 - **SCEPTRE App**: `fep` hosts raised `TypeError`, built without the required `device_subtype`.
 - **SCEPTRE App**: Per-device register overrides raised `RuntimeError` in `SceptreMetadataParser`, which popped keys while iterating a live dict view.
 - **SCEPTRE App**: A `power-transmission` inverter raised `TypeError`, passing `infrastructure` twice into `Device()`.

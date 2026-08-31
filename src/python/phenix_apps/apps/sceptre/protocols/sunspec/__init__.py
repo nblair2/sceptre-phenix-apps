@@ -39,6 +39,10 @@ class SunSpecDevice:
 
         if self.infra is None:
             self.infra = "PowerDistribution"
+        else:
+            # Callers pass the lowercase infrastructure name ("power-distribution"),
+            # but Register.mappings is keyed CamelCase ("PowerDistribution").
+            self.infra = "".join(part.capitalize() for part in self.infra.split("-"))
 
         # Start the SunSpec register address at 40002 because
         # the sunspec_template automatically injects the well-known
