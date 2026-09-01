@@ -11,6 +11,10 @@ Perspective HMI. To facilitate HMI building, tags are imported automatically (fr
 returned DNP3 points). A generated sync tag periodically browses each device on the OPC
 server and mirrors every point into the `[default]` provider.
 
+With `api`, a small WebDev resource exposes DNP3 over HTTP: a `GET` reads every point, and
+a `POST` issues a DNP3 control command. It is independent of `perspective` and works on
+its own.
+
 Alternatively, if `gwbk` points at a hand-authored gateway backup, the app injects it
 untouched and restores it at boot via `gwcmd.bat -s <file> -m`.
 
@@ -37,7 +41,11 @@ spec:
               # perspective:
               #   project: hmi
               #   open_client: true
-              # OR (mutually exclusive with connected_rtus and perspective)
+              api: true             # optional WebDev tag API; or an options object:
+              # api:
+              #   auth: true
+              #   roles: [Administrator]
+              # OR (mutually exclusive with connected_rtus, perspective, and api)
               # restore a hand-authored backup verbatim:
               # gwbk: /phenix/injects/${BRANCH_NAME}/ignition/base.gwbk
           - hostname: hmi-1
@@ -53,7 +61,8 @@ spec:
 | `type`           | `gateway` | Host role; `gateway` or `perspective`                             |      
 | `connected_rtus` | `[]`      | RTUs to connect to; plain hostname strings or override objects (below).      |
 | `perspective`    | (none)    | Generate a basic Perspective HMI; `true` for defaults or an options object (below). Requires `connected_rtus`. |
-| `gwbk`           | (none)    | Path on the phenix host to a complete `.gwbk` to restore verbatim. Mutually exclusive with `connected_rtus` and `perspective`. |
+| `api`            | (none)    | Serve a WebDev tag API; `true` for defaults or an options object (below). Independent of `perspective` and `connected_rtus`. |
+| `gwbk`           | (none)    | Path on the phenix host to a complete `.gwbk` to restore verbatim. Mutually exclusive with `connected_rtus`, `perspective`, and `api`. |
 
 #### `connected_rtus` entries
 
@@ -72,6 +81,14 @@ spec:
 |---------------|---------|------------------------------------------------------------------------|
 | `project`     | `hmi`   | Ignition project name; the HMI is served at `http://<gateway>:8088/data/perspective/client/<project>`. |
 | `open_client` | `true`  | Also auto-open the HMI in Firefox on the gateway's own console at boot. |
+
+#### `api:` options
+
+| Option        | Default   | Description                                                                          |
+|---------------|-----------|--------------------------------------------------------------------------------------|
+| `auth`        | `false`   | Require HTTP Basic auth on the `POST` (control) endpoint; reads stay open.            |
+| `roles`       | `[]`      | When `auth` is set, restrict control to users holding at least one of these roles.   |
+| `user_source` | `default` | Gateway User Source profile that `auth` validates credentials against.               |
 
 ### `type: perspective`
 
@@ -105,6 +122,52 @@ the DNP3 command popup to send either:
 With `open_client` (and on every `type: perspective` host) a startup script at
 `/phenix/startup/99-ignition-perspective.ps1` opens the HMI URL in Firefox at boot.
 
+## REST API
+
+With `api`, a `tags` WebDev resource is served at
+`http://<gateway>:8088/system/webdev/api/tags`. It needs neither `perspective` nor a
+pre-populated tag provider.
+
+**`GET`** reads points straight from the OPC server, keyed by device then OPC item path.
+Optional `?device=<name>` limits the response to one device.
+
+```bash
+# every point on every device
+curl http://<gateway>:8088/system/webdev/api/tags
+
+# just one device
+curl 'http://<gateway>:8088/system/webdev/api/tags?device=rtu-1'
+```
+
+**`POST`** issues a DNP3 command through the driver (a binary CROB). The body names the
+Ignition device and the point index; the remaining fields default to a latch-on close:
+
+| Field        | Default | Description                                        |
+|--------------|---------|----------------------------------------------------|
+| `deviceName` | `DNP3`  | Ignition device name (the RTU's `name`).           |
+| `index`      | (req'd) | DNP3 output index.                                 |
+| `tcc`        | `1`     | Trip/close code: 0 NUL, 1 CLOSE, 2 TRIP.           |
+| `opType`     | `3`     | 0 NUL, 1 PULSE_ON, 2 PULSE_OFF, 3 LATCH_ON, 4 LATCH_OFF. |
+| `count`      | `1`     | Operation count.                                   |
+| `onTime`     | `1000`  | On time (ms).                                      |
+| `offTime`    | `1000`  | Off time (ms).                                     |
+
+```bash
+curl -X POST http://<gateway>:8088/system/webdev/api/tags \
+     -H 'Content-Type: application/json' \
+     -d '{"deviceName": "rtu-1", "index": 0, "opType": 3}'
+```
+
+With `auth: true`, the `POST` endpoint requires HTTP Basic credentials, validated against
+`user_source` (optionally restricted to `roles`); reads stay open. Pair it with the
+gateway's HTTPS port so credentials do not travel in the clear:
+
+```bash
+curl -u operator:secret -X POST https://<gateway>:8043/system/webdev/api/tags \
+     -H 'Content-Type: application/json' \
+     -d '{"deviceName": "rtu-1", "index": 0, "opType": 4}'
+```
+
 ## Testing
 
 Unit tests live in `tests/`:
@@ -127,6 +190,7 @@ PHENIX_LOG_FILE="" phenix-app-ignition pre-start --dry-run < phenix_apps/apps/ig
 * Only developed and tested with Igntion 8.3.1.
 * Only works for Windows hosts.
 * Only works for DNP3 outstations.
+* `api` requires the WebDev module installed and enabled on the gateway.
 * Expects VMs configured to run all scripts in `C:\phenix\startup` and `C:\phenix\user-startup` at boot.
 * Expects `firefox.exe` in the path.
 * Expects the ignition service to start automatically at boot.

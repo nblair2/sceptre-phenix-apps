@@ -15,6 +15,7 @@ from phenix_apps.common.logger import logger
 # Templates
 TEMPLATES_DIR = utils.abs_path(__file__, "templates")
 PERSPECTIVE_TEMPLATES_DIR = utils.abs_path(__file__, "templates/perspective")
+API_TEMPLATES_DIR = utils.abs_path(__file__, "templates/api")
 TAG_FOLDER_RESOURCE_FILE = f"{TEMPLATES_DIR}/tag-folder-resource.json"
 # Auto-discover tags from returned DNP3 points
 TAG_SYNC_TAG_FILE = f"{TEMPLATES_DIR}/tag-sync-tag.json"
@@ -23,6 +24,9 @@ TAG_SYNC_SCRIPT_FILE = f"{TEMPLATES_DIR}/tag-sync.py"
 # hosts: types
 GATEWAY_TYPE = "gateway"
 PERSPECTIVE_TYPE = "perspective"
+
+# Fixed project name for the WebDev tag API
+API_PROJECT_NAME = "api"
 
 # expect windows, built with /phenix/startup and /phenix/user-startup
 GUEST_APP_DIR = "/phenix/ignition"
@@ -76,6 +80,23 @@ class PerspectiveConfig(BaseModel):
         return v
 
 
+class ApiConfig(BaseModel):
+    """WebDev tag API options for a gateway (`api: true` for defaults).
+
+    Serves a `tags` WebDev resource at
+    `http://<gateway>:8088/system/webdev/api/tags`: GET reads every DNP3 point
+    from the OPC server, POST issues a DNP3 command (binary CROB). `auth`
+    requires HTTP Basic auth on the POST (control) endpoint, validated against
+    `user_source` and optionally restricted to `roles`; reads stay open.
+    """
+
+    auth: bool = False
+    roles: list[str] = Field(default_factory=list)
+    user_source: str = "default"
+
+    model_config = {"extra": "ignore"}
+
+
 class IgnitionHostConfig(BaseModel):
     """Per-host metadata for a `type: gateway` node.
 
@@ -87,12 +108,15 @@ class IgnitionHostConfig(BaseModel):
     With `gwbk`, the given gateway backup is
     restored verbatim at boot instead.
 
-    `gwbk` is mutually exclusive with the other options.
+    `api` optionally serves a WebDev tag API and is independent of both
+    `perspective` and `connected_rtus`. `gwbk` is mutually exclusive with the
+    other options.
     """
 
     gwbk: str | None = None
     connected_rtus: list[RtuDeviceConfig] = Field(default_factory=list)
     perspective: PerspectiveConfig | None = None
+    api: ApiConfig | None = None
 
     model_config = {"extra": "ignore"}
 
@@ -114,8 +138,18 @@ class IgnitionHostConfig(BaseModel):
             return None
         return v
 
+    @field_validator("api", mode="before")
+    @classmethod
+    def _normalize_api(cls, v: Any) -> Any:
+        """Allow `api: true` as shorthand for the defaults."""
+        if v is True:
+            return ApiConfig()
+        if v is False:
+            return None
+        return v
+
     @model_validator(mode="after")
-    def _gwbk_excludes_rtus(self) -> "IgnitionHostConfig":
+    def _gwbk_excludes_extras(self) -> "IgnitionHostConfig":
         if self.gwbk and self.connected_rtus:
             raise ValueError(
                 "'gwbk' restores a complete backup verbatim and cannot be "
@@ -126,6 +160,12 @@ class IgnitionHostConfig(BaseModel):
             raise ValueError(
                 "'perspective' builds an HMI from connected_rtus and cannot be "
                 "combined with 'gwbk'; add the HMI project to the backup itself"
+            )
+        if self.gwbk and self.api:
+            raise ValueError(
+                "'api' injects a WebDev project into the gateway's data tree "
+                "and cannot be combined with 'gwbk'; add the api project to "
+                "the backup itself"
             )
         return self
 
@@ -164,8 +204,10 @@ class Ignition(AppBase):
         hostname = gateway.hostname
         cfg = IgnitionHostConfig(**gateway.metadata)
 
-        if not cfg.connected_rtus and not cfg.gwbk:
-            logger.warning(f"'{hostname}' has no connected_rtus and no gwbk; skipping")
+        if not cfg.connected_rtus and not cfg.gwbk and not cfg.api:
+            logger.warning(
+                f"'{hostname}' has no connected_rtus, api, or gwbk; skipping"
+            )
             return None
 
         host_dir = f"{self.app_dir}/{hostname}"
@@ -201,6 +243,8 @@ class Ignition(AppBase):
                         f"{cfg.perspective.project}"
                     )
                     self._inject_open_client_script(hostname, host_dir, url)
+            if cfg.api:
+                self._write_api(hostname, host_dir, cfg.api)
 
         return cfg
 
@@ -294,6 +338,39 @@ class Ignition(AppBase):
         ):
             for src, dst in self._tree_injects(src_dir, dst_dir):
                 self.add_inject(hostname=hostname, inject={"src": src, "dst": dst})
+
+    def _write_api(self, hostname: str, host_dir: str, acfg: ApiConfig) -> None:
+        """Render the WebDev tag-API project and inject it file-by-file into
+        the gateway's data tree. Independent of perspective and connected_rtus:
+        the resource browses the OPC server live at request time."""
+        project_dir = f"{host_dir}/api/project/{API_PROJECT_NAME}"
+        self._write_api_project(project_dir, acfg)
+        dst_dir = f"{GUEST_PROJECTS_DIR}/{API_PROJECT_NAME}"
+        for src, dst in self._tree_injects(project_dir, dst_dir):
+            self.add_inject(hostname=hostname, inject={"src": src, "dst": dst})
+
+    @staticmethod
+    def _write_api_project(project_dir: str, acfg: ApiConfig) -> None:
+        """Copy the WebDev project tree captured from a live 8.3 gateway, then
+        patch the auth settings on the `tags` resource's POST (control) method.
+        The project name is fixed and reads stay open, so this is the only
+        dynamic part; WebDev stores per-method auth in the resource's
+        config.json."""
+        if os.path.exists(project_dir):
+            shutil.rmtree(project_dir)
+        shutil.copytree(API_TEMPLATES_DIR, project_dir)
+
+        config_path = (
+            f"{project_dir}/com.inductiveautomation.webdev/resources/tags/config.json"
+        )
+        with open(config_path) as f:
+            config = json.load(f)
+        post = config["doPost"]
+        post["require-auth"] = acfg.auth
+        post["required-roles"] = ",".join(acfg.roles)
+        post["user-source"] = acfg.user_source if acfg.auth else ""
+        with open(config_path, "w") as f:
+            json.dump(config, f, indent=2)
 
     @staticmethod
     def _tree_injects(src_dir: str, dst_dir: str) -> list[tuple[str, str]]:

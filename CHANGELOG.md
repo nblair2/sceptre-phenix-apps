@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Ignition App**: New app that configures an Inductive Automation Ignition Gateway 8.3 SCADA master
 
 ### Added
+- **Ignition App**: Optional REST-like tag API (`api: true`) served by the WebDev module — `GET /system/webdev/api/tags` reads all DNP3 points (or one device via `?device=`), `POST` issues a DNP3 command (CROB), with optional HTTP Basic auth on the control endpoint against a gateway User Source.
 - **SCEPTRE App**: Pre-flight scenario validation: one pydantic model, run before either stage, reporting every problem at once with the host and field.
 - **SCEPTRE App**: Stage accounting in the logs: a scenario inventory by device type, and what each handler produced.
 - **SCEPTRE App**: Files in `<assetDir>/injects/override/` that match no injection are reported as probable typos.
