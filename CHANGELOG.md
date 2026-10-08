@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SCEPTRE App**: The `reg_config` manual register-map path. It was dead code: the app never populated it, so every device always took the automatic numbering branch. Output is unchanged.
 
 ### Fixed
+- **Common Utils**: cc waits read from `cc commands` columns by header name instead of position. The `issued` column added in minimega 3.3.0 shifted `sent`, so every wait failed looking at the wrong column. The list is now generated based on the headers mm returns.
 - **SCEPTRE App**: With more than one PowerWorld provider, only the last one's `hil_tags` reached the object list, and only the last one's `objects.txt` was written. Tags now aggregate across providers and every PowerWorld provider gets the combined `objects.txt`.
 - **SCEPTRE App**: Every `sunspec` inverter raised `KeyError`: the SunSpec register mappings are keyed `PowerDistribution` but received `power-distribution`. The whole protocol was unusable.
 - **SCEPTRE App**: `fep` hosts raised `TypeError`, built without the required `device_subtype`.
