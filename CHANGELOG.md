@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Common Utils**: fix cc commands parsing to be resilient to header changes.
+- **Common Utils**: `mm_exec_wait` and `mm_get_cc_responses` split `cc responses` output on whole header lines; stderr no longer swallows stdout, and output containing `/` is no longer truncated.
 - **SCEPTRE App**: With more than one PowerWorld provider, only the last one's `hil_tags` reached the object list, and only the last one's `objects.txt` was written. Tags now aggregate across providers and every PowerWorld provider gets the combined `objects.txt`.
 - **SCEPTRE App**: Every `sunspec` inverter raised `KeyError`: the SunSpec register mappings are keyed `PowerDistribution` but received `power-distribution`. The whole protocol was unusable.
 - **SCEPTRE App**: `fep` hosts raised `TypeError`, built without the required `device_subtype`.
