@@ -820,6 +820,13 @@ def test_cc_response_files_keeps_multiple_ids_and_clients():
     }
 
 
+def test_mm_get_cc_responses_skips_response_without_files(monkeypatch):
+    # A prefix whose commands only recorded an exit code: minimega returns "\n".
+    mm = _StubCCResponses([{"Host": "h", "Response": "\n", "Error": ""}])
+
+    assert utils.mm_get_cc_responses(mm, "silent") == []
+
+
 def test_mm_exec_wait_separates_stdout_and_stderr(monkeypatch):
     monkeypatch.setattr(utils, "mm_cc_filter_vm", lambda *_a, **_k: (_UUID, "h"))
     monkeypatch.setattr(utils, "mm_command_id_for_host", lambda *_: "3")

@@ -15,6 +15,7 @@ import tempfile
 import time
 import warnings
 from io import StringIO
+from itertools import pairwise
 from pathlib import Path
 from socket import inet_ntoa
 from struct import pack
@@ -259,7 +260,7 @@ def _cc_response_files(text: str) -> dict[tuple[str, str], dict[str, str]]:
     files: dict[tuple[str, str], dict[str, str]] = {}
     headers = list(_CC_RESP_HEADER.finditer(text))
 
-    for header, nxt in zip(headers, [*headers[1:], None], strict=True):
+    for header, nxt in pairwise([*headers, None]):
         cmd_id, uuid, name = header.groups()
         end = nxt.start() if nxt else len(text)
         files.setdefault((cmd_id, uuid), {})[name] = text[header.end() : end].strip()
